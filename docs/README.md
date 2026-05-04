@@ -215,6 +215,9 @@ Conduct periodic access reviews to identify:
 
 ## Related Resources
 
+- [Microsoft Entra Agent ID](https://learn.microsoft.com/en-us/entra/id-governance/agent-id-governance-overview) - Official governance documentation
+- [Agent Identity Sponsor Tasks](https://learn.microsoft.com/en-us/entra/id-governance/agent-sponsor-tasks) - Lifecycle workflow tasks
+- [Get ahead of agent sprawl](https://techcommunity.microsoft.com/blog/microsoft-entra-blog/get-ahead-of-agent-sprawl-manage-and-govern-ai-agents-at-scale/4513160) - Manage and govern AI agents at scale
 - [Microsoft Entra Agents](https://learn.microsoft.com/en-us/entra/security-copilot/entra-agents)
 - [Agent Lifecycle Management](https://teamcopilot.nl/2026/03/14/managing-agent-identity-access-accountability/)
 - [Microsoft Graph API](https://learn.microsoft.com/graph/use-the-api)
