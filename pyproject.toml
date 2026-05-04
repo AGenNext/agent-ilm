@@ -25,6 +25,7 @@ classifiers = [
 ]
 dependencies = [
     "requests>=2.28.0",
+    "fire>=0.5.0",
 ]
 
 [project.optional-dependencies]

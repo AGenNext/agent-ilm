@@ -1,0 +1,10 @@
+__pycache__
+*.pyc
+.git
+*.egg-info
+.venv
+venv
+.env
+*.log
+audit.log
+state.json

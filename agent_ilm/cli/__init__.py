@@ -3,14 +3,13 @@
 Agent Identity Lifecycle Management CLI
 
 A CLI tool for managing AI agent identities in Microsoft Entra ID.
-Similar to Claude Code for developer productivity.
+Built with Google Fire framework.
 """
 
-import argparse
-import sys
+import fire
 import os
 import json
-from typing import Optional
+from typing import Optional, List
 
 from agent_ilm import Agent, AgentMetadata, RiskTier, DataClassification, AgentStatus
 from agent_ilm import AuditLogger, AuditEventType
@@ -80,218 +79,168 @@ def find_agent(agents: list[Agent], agent_id: str) -> Optional[Agent]:
     return None
 
 
-def cmd_register(args) -> int:
-    """Register a new agent"""
-    agents = load_agents()
-    metadata = AgentMetadata(
-        owner=args.owner,
-        sponsor=args.sponsor,
-        use_case=args.use_case or "",
-        risk_tier=RiskTier(args.risk_tier),
-        data_classification=DataClassification(args.data_classification)
-    )
+class CLI:
+    """Agent Identity Lifecycle Management CLI"""
     
-    agent = Agent(
-        name=args.name,
-        description=args.description or "",
-        status=AgentStatus.ACTIVE,
-        metadata=metadata
-    )
+    def register(
+        self,
+        name: str,
+        owner: str,
+        description: str = "",
+        sponsor: str = None,
+        use_case: str = "",
+        risk_tier: str = "medium",
+        data_classification: str = "internal"
+    ):
+        """Register a new agent"""
+        agents = load_agents()
+        metadata = AgentMetadata(
+            owner=owner,
+            sponsor=sponsor,
+            use_case=use_case or "",
+            risk_tier=RiskTier(risk_tier),
+            data_classification=DataClassification(data_classification)
+        )
+        
+        agent = Agent(
+            name=name,
+            description=description or "",
+            status=AgentStatus.ACTIVE,
+            metadata=metadata
+        )
+        
+        agents.append(agent)
+        save_agents(agents)
+        
+        # Audit log
+        audit = AuditLogger()
+        audit.log(
+            event_type=AuditEventType.AGENT_REGISTERED,
+            agent_id=agent.id,
+            actor=owner,
+            action="register_agent",
+            details={"name": name, "risk_tier": risk_tier}
+        )
+        
+        return f"✓ Registered agent: {agent.name} (ID: {agent.id})"
     
-    agents.append(agent)
-    save_agents(agents)
+    def list(self):
+        """List all agents"""
+        agents = load_agents()
+        
+        if not agents:
+            return "No agents registered"
+        
+        output = [f"{'Name':<30} {'Status':<12} {'Owner':<25} {'Risk':<10}", "-" * 80]
+        
+        for agent in agents:
+            output.append(f"{agent.name:<30} {agent.status.value:<12} {agent.metadata.owner:<25} {agent.metadata.risk_tier.value:<10}")
+        
+        output.append(f"\nTotal: {len(agents)} agent(s)")
+        return "\n".join(output)
     
-    # Audit log
-    audit = AuditLogger()
-    audit.log(
-        event_type=AuditEventType.AGENT_REGISTERED,
-        agent_id=agent.id,
-        actor=args.owner,
-        action="register_agent",
-        details={"name": args.name, "risk_tier": args.risk_tier}
-    )
+    def show(self, agent_id: str):
+        """Show agent details"""
+        agents = load_agents()
+        agent = find_agent(agents, agent_id)
+        
+        if not agent:
+            return f"Agent not found: {agent_id}"
+        
+        lines = [
+            f"Name: {agent.name}",
+            f"ID: {agent.id}",
+            f"Status: {agent.status.value}",
+            f"Description: {agent.description}",
+            f"Owner: {agent.metadata.owner}",
+            f"Sponsor: {agent.metadata.sponsor or '-'}",
+            f"Use Case: {agent.metadata.use_case or '-'}",
+            f"Risk Tier: {agent.metadata.risk_tier.value}",
+            f"Data Classification: {agent.metadata.data_classification.value}",
+        ]
+        return "\n".join(lines)
     
-    print(f"✓ Registered agent: {agent.name} (ID: {agent.id})")
-    return 0
-
-
-def cmd_list(args) -> int:
-    """List all agents"""
-    agents = load_agents()
+    def update(
+        self,
+        agent_id: str,
+        name: str = None,
+        description: str = None,
+        owner: str = None,
+        sponsor: str = None
+    ):
+        """Update an agent"""
+        agents = load_agents()
+        agent = find_agent(agents, agent_id)
+        
+        if not agent:
+            return f"Agent not found: {agent_id}"
+        
+        if name:
+            agent.name = name
+        if description:
+            agent.description = description
+        if owner:
+            agent.metadata.owner = owner
+        if sponsor:
+            agent.metadata.sponsor = sponsor
+        
+        save_agents(agents)
+        
+        audit = AuditLogger()
+        audit.log(
+            event_type=AuditEventType.AGENT_UPDATED,
+            agent_id=agent.id,
+            actor=owner or "unknown",
+            action="update_agent",
+            details={"name": agent.name}
+        )
+        
+        return f"✓ Updated agent: {agent.name}"
     
-    if not agents:
-        print("No agents registered")
-        return 0
+    def deprecate(self, agent_id: str):
+        """Deprecate an agent"""
+        agents = load_agents()
+        agent = find_agent(agents, agent_id)
+        
+        if not agent:
+            return f"Agent not found: {agent_id}"
+        
+        agent.status = AgentStatus.DEPRECATED
+        from datetime import datetime
+        agent.deprecated_at = datetime.utcnow()
+        
+        save_agents(agents)
+        
+        audit = AuditLogger()
+        audit.log(
+            event_type=AuditEventType.AGENT_DEPRECATED,
+            agent_id=agent.id,
+            actor="cli",
+            action="deprecate_agent"
+        )
+        
+        return f"✓ Deprecated agent: {agent.name}"
     
-    print(f"\n{'Name':<30} {'Status':<12} {'Owner':<25} {'Risk':<10}")
-    print("-" * 80)
-    
-    for agent in agents:
-        print(f"{agent.name:<30} {agent.status.value:<12} {agent.metadata.owner:<25} {agent.metadata.risk_tier.value:<10}")
-    
-    print(f"\nTotal: {len(agents)} agent(s)")
-    return 0
-
-
-def cmd_show(args) -> int:
-    """Show agent details"""
-    agents = load_agents()
-    agent = find_agent(agents, args.agent_id)
-    
-    if not agent:
-        print(f"Agent not found: {args.agent_id}")
-        return 1
-    
-    print(f"\n{'Name:':<20} {agent.name}")
-    print(f"{'ID:':<20} {agent.id}")
-    print(f"{'Status:':<20} {agent.status.value}")
-    print(f"{'Description:':<20} {agent.description}")
-    print(f"{'Owner:':<20} {agent.metadata.owner}")
-    print(f"{'Sponsor:':<20} {agent.metadata.sponsor or '-'}")
-    print(f"{'Use Case:':<20} {agent.metadata.use_case or '-'}")
-    print(f"{'Risk Tier:':<20} {agent.metadata.risk_tier.value}")
-    print(f"{'Data Classification:':<20} {agent.metadata.data_classification.value}")
-    
-    return 0
-
-
-def cmd_update(args) -> int:
-    """Update an agent"""
-    agents = load_agents()
-    agent = find_agent(agents, args.agent_id)
-    
-    if not agent:
-        print(f"Agent not found: {args.agent_id}")
-        return 1
-    
-    if args.name:
-        agent.name = args.name
-    if args.description:
-        agent.description = args.description
-    if args.owner:
-        agent.metadata.owner = args.owner
-    if args.sponsor:
-        agent.metadata.sponsor = args.sponsor
-    
-    save_agents(agents)
-    
-    audit = AuditLogger()
-    audit.log(
-        event_type=AuditEventType.AGENT_UPDATED,
-        agent_id=agent.id,
-        actor=args.owner or "unknown",
-        action="update_agent",
-        details={"name": agent.name}
-    )
-    
-    print(f"✓ Updated agent: {agent.name}")
-    return 0
-
-
-def cmd_deprecate(args) -> int:
-    """Deprecate an agent"""
-    agents = load_agents()
-    agent = find_agent(agents, args.agent_id)
-    
-    if not agent:
-        print(f"Agent not found: {args.agent_id}")
-        return 1
-    
-    agent.status = AgentStatus.DEPRECATED
-    from datetime import datetime
-    agent.deprecated_at = datetime.utcnow()
-    
-    save_agents(agents)
-    
-    audit = AuditLogger()
-    audit.log(
-        event_type=AuditEventType.AGENT_DEPRECATED,
-        agent_id=agent.id,
-        actor="cli",
-        action="deprecate_agent"
-    )
-    
-    print(f"✓ Deprecated agent: {agent.name}")
-    return 0
-
-
-def cmd_audit(args) -> int:
-    """Show audit logs"""
-    audit = AuditLogger()
-    events = audit.get_events(agent_id=args.agent_id)
-    
-    if not events:
-        print("No audit events found")
-        return 0
-    
-    print(f"\n{'Timestamp':<28} {'Type':<22} {'Actor':<25} {'Status':<10}")
-    print("-" * 90)
-    
-    for event in events:
-        print(f"{event.timestamp.isoformat():<28} {event.event_type.value:<22} {event.actor:<25} {event.status:<10}")
-    
-    print(f"\nTotal: {len(events)} event(s)")
-    return 0
+    def audit(self, agent_id: str = None):
+        """Show audit logs"""
+        audit = AuditLogger()
+        events = audit.get_events(agent_id=agent_id)
+        
+        if not events:
+            return "No audit events found"
+        
+        output = [f"{'Timestamp':<28} {'Type':<22} {'Actor':<25} {'Status':<10}", "-" * 90]
+        
+        for event in events:
+            output.append(f"{event.timestamp.isoformat():<28} {event.event_type.value:<22} {event.actor:<25} {event.status:<10}")
+        
+        output.append(f"\nTotal: {len(events)} event(s)")
+        return "\n".join(output)
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Agent Identity Lifecycle Management CLI",
-        prog="agent-ilm"
-    )
-    
-    subparsers = parser.add_subparsers(dest="command", help="Commands")
-    
-    # register
-    p_reg = subparsers.add_parser("register", help="Register a new agent")
-    p_reg.add_argument("--name", required=True, help="Agent name")
-    p_reg.add_argument("--description", help="Agent description")
-    p_reg.add_argument("--owner", required=True, help="Technical owner email")
-    p_reg.add_argument("--sponsor", help="Business sponsor email")
-    p_reg.add_argument("--use-case", help="Use case")
-    p_reg.add_argument("--risk-tier", default="medium", choices=["low", "medium", "high", "critical"], help="Risk tier")
-    p_reg.add_argument("--data-classification", default="internal", choices=["public", "internal", "confidential", "restricted"], help="Data classification")
-    
-    # list
-    p_list = subparsers.add_parser("list", help="List all agents")
-    
-    # show
-    p_show = subparsers.add_parser("show", help="Show agent details")
-    p_show.add_argument("agent_id", help="Agent ID or name")
-    
-    # update
-    p_update = subparsers.add_parser("update", help="Update an agent")
-    p_update.add_argument("agent_id", help="Agent ID")
-    p_update.add_argument("--name", help="Agent name")
-    p_update.add_argument("--description", help="Agent description")
-    p_update.add_argument("--owner", help="Technical owner email")
-    p_update.add_argument("--sponsor", help="Business sponsor email")
-    
-    # deprecate
-    p_dep = subparsers.add_parser("deprecate", help="Deprecate an agent")
-    p_dep.add_argument("agent_id", help="Agent ID")
-    
-    # audit
-    p_audit = subparsers.add_parser("audit", help="Show audit logs")
-    p_audit.add_argument("--agent-id", help="Filter by agent ID")
-    
-    args = parser.parse_args()
-    
-    if not args.command:
-        parser.print_help()
-        return 0
-    
-    commands = {
-        "register": cmd_register,
-        "list": cmd_list,
-        "show": cmd_show,
-        "update": cmd_update,
-        "deprecate": cmd_deprecate,
-        "audit": cmd_audit
-    }
-    
-    return commands[args.command](args)
+    fire.Fire(CLI)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
