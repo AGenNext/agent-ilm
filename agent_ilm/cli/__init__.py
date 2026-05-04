@@ -2,14 +2,14 @@
 """
 Agent Identity Lifecycle Management CLI
 
-A CLI tool for managing AI agent identities in Microsoft Entra ID.
-Built with Google Fire framework.
+Query tool for viewing registered agents.
+Create agents at: https://agentnext.example.com
 """
 
 import fire
 import os
 import json
-from typing import Optional, List
+from typing import Optional
 
 from agent_ilm import Agent, AgentMetadata, RiskTier, DataClassification, AgentStatus
 from agent_ilm import AuditLogger, AuditEventType
@@ -45,32 +45,6 @@ def load_agents() -> list[Agent]:
     return agents
 
 
-def save_agents(agents: list[Agent]) -> None:
-    """Save agents to state file"""
-    os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
-    data = {
-        "agents": [
-            {
-                "id": a.id,
-                "name": a.name,
-                "description": a.description,
-                "status": a.status.value,
-                "metadata": {
-                    "owner": a.metadata.owner,
-                    "sponsor": a.metadata.sponsor,
-                    "use_case": a.metadata.use_case,
-                    "risk_tier": a.metadata.risk_tier.value,
-                    "data_classification": a.metadata.data_classification.value
-                },
-                "service_principal_id": a.service_principal_id
-            }
-            for a in agents
-        ]
-    }
-    with open(STATE_FILE, "w") as f:
-        json.dump(data, f)
-
-
 def find_agent(agents: list[Agent], agent_id: str) -> Optional[Agent]:
     """Find agent by ID or name"""
     for a in agents:
@@ -80,56 +54,20 @@ def find_agent(agents: list[Agent], agent_id: str) -> Optional[Agent]:
 
 
 class CLI:
-    """Agent Identity Lifecycle Management CLI"""
+    """Agent Identity Lifecycle Management CLI - Query Only"""
     
-    def register(
-        self,
-        name: str,
-        owner: str,
-        description: str = "",
-        sponsor: str = None,
-        use_case: str = "",
-        risk_tier: str = "medium",
-        data_classification: str = "internal"
-    ):
-        """Register a new agent"""
+    def list(self, status: str = None):
+        """List all registered agents
+        
+        To create agents, visit: https://agentnext.example.com
+        """
         agents = load_agents()
-        metadata = AgentMetadata(
-            owner=owner,
-            sponsor=sponsor,
-            use_case=use_case or "",
-            risk_tier=RiskTier(risk_tier),
-            data_classification=DataClassification(data_classification)
-        )
         
-        agent = Agent(
-            name=name,
-            description=description or "",
-            status=AgentStatus.ACTIVE,
-            metadata=metadata
-        )
-        
-        agents.append(agent)
-        save_agents(agents)
-        
-        # Audit log
-        audit = AuditLogger()
-        audit.log(
-            event_type=AuditEventType.AGENT_REGISTERED,
-            agent_id=agent.id,
-            actor=owner,
-            action="register_agent",
-            details={"name": name, "risk_tier": risk_tier}
-        )
-        
-        return f"✓ Registered agent: {agent.name} (ID: {agent.id})"
-    
-    def list(self):
-        """List all agents"""
-        agents = load_agents()
+        if status:
+            agents = [a for a in agents if a.status.value == status]
         
         if not agents:
-            return "No agents registered"
+            return "No agents found.\nTo create agents, visit: https://agentnext.example.com"
         
         output = [f"{'Name':<30} {'Status':<12} {'Owner':<25} {'Risk':<10}", "-" * 80]
         
@@ -137,15 +75,19 @@ class CLI:
             output.append(f"{agent.name:<30} {agent.status.value:<12} {agent.metadata.owner:<25} {agent.metadata.risk_tier.value:<10}")
         
         output.append(f"\nTotal: {len(agents)} agent(s)")
+        output.append("\nTo create agents, visit: https://agentnext.example.com")
         return "\n".join(output)
     
     def show(self, agent_id: str):
-        """Show agent details"""
+        """Show agent details
+        
+        Usage: agent-ilm show <agent-id-or-name>
+        """
         agents = load_agents()
         agent = find_agent(agents, agent_id)
         
         if not agent:
-            return f"Agent not found: {agent_id}"
+            return f"Agent not found: {agent_id}\nTo create agents, visit: https://agentnext.example.com"
         
         lines = [
             f"Name: {agent.name}",
@@ -160,74 +102,20 @@ class CLI:
         ]
         return "\n".join(lines)
     
-    def update(
-        self,
-        agent_id: str,
-        name: str = None,
-        description: str = None,
-        owner: str = None,
-        sponsor: str = None
-    ):
-        """Update an agent"""
-        agents = load_agents()
-        agent = find_agent(agents, agent_id)
+    def audit(self, agent_id: str = None, limit: int = 20):
+        """Show audit logs
         
-        if not agent:
-            return f"Agent not found: {agent_id}"
-        
-        if name:
-            agent.name = name
-        if description:
-            agent.description = description
-        if owner:
-            agent.metadata.owner = owner
-        if sponsor:
-            agent.metadata.sponsor = sponsor
-        
-        save_agents(agents)
-        
-        audit = AuditLogger()
-        audit.log(
-            event_type=AuditEventType.AGENT_UPDATED,
-            agent_id=agent.id,
-            actor=owner or "unknown",
-            action="update_agent",
-            details={"name": agent.name}
-        )
-        
-        return f"✓ Updated agent: {agent.name}"
-    
-    def deprecate(self, agent_id: str):
-        """Deprecate an agent"""
-        agents = load_agents()
-        agent = find_agent(agents, agent_id)
-        
-        if not agent:
-            return f"Agent not found: {agent_id}"
-        
-        agent.status = AgentStatus.DEPRECATED
-        from datetime import datetime
-        agent.deprecated_at = datetime.utcnow()
-        
-        save_agents(agents)
-        
-        audit = AuditLogger()
-        audit.log(
-            event_type=AuditEventType.AGENT_DEPRECATED,
-            agent_id=agent.id,
-            actor="cli",
-            action="deprecate_agent"
-        )
-        
-        return f"✓ Deprecated agent: {agent.name}"
-    
-    def audit(self, agent_id: str = None):
-        """Show audit logs"""
+        Usage: agent-ilm audit
+               agent-ilm audit --agent-id <id>
+        """
         audit = AuditLogger()
         events = audit.get_events(agent_id=agent_id)
         
         if not events:
             return "No audit events found"
+        
+        # Limit events
+        events = events[:limit]
         
         output = [f"{'Timestamp':<28} {'Type':<22} {'Actor':<25} {'Status':<10}", "-" * 90]
         
@@ -236,6 +124,29 @@ class CLI:
         
         output.append(f"\nTotal: {len(events)} event(s)")
         return "\n".join(output)
+    
+    def status(self, agent_id: str):
+        """Quick status check
+        
+        Usage: agent-ilm status <agent-id>
+        """
+        agents = load_agents()
+        agent = find_agent(agents, agent_id)
+        
+        if not agent:
+            return f"not_found"
+        
+        return agent.status.value
+    
+    def dashboard(self):
+        """Open agent platform in browser
+        
+        Usage: agent-ilm dashboard
+        """
+        import webbrowser
+        url = "https://agentnext.example.com"
+        webbrowser.open(url)
+        return f"Opening {url}..."
 
 
 def main():
