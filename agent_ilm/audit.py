@@ -73,8 +73,20 @@ class AuditLogger:
     
     def _write(self, event: AuditEvent) -> None:
         """Write event to log file"""
+        data = {
+            "id": event.id,
+            "timestamp": event.timestamp.isoformat(),
+            "event_type": event.event_type.value,
+            "agent_id": event.agent_id,
+            "actor": event.actor,
+            "action": event.action,
+            "details": event.details,
+            "resource_id": event.resource_id,
+            "status": event.status,
+            "error_message": event.error_message
+        }
         with open(self.log_file, "a") as f:
-            f.write(json.dumps(asdict(event)) + "\n")
+            f.write(json.dumps(data) + "\n")
     
     def get_events(
         self,

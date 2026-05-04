@@ -67,7 +67,7 @@ class EntraIdentityManager:
         self._token = response.json()["access_token"]
         return self._token
     
-    def _ headers(self) -> dict:
+    def _get_headers(self) -> dict:
         return {
             "Authorization": f"Bearer {self._get_token()}",
             "Content-Type": "application/json"
@@ -90,7 +90,7 @@ class EntraIdentityManager:
         if tags:
             payload["tags"] = tags
         
-        response = requests.post(url, headers=self._headers(), json=payload)
+        response = requests.post(url, headers=self._get_headers(), json=payload)
         response.raise_for_status()
         
         return response.json()
@@ -99,7 +99,7 @@ class EntraIdentityManager:
         """Get a service principal"""
         url = f"{self.config.graph_url}/servicePrincipals/{object_id}"
         
-        response = requests.get(url, headers=self._headers())
+        response = requests.get(url, headers=self._get_headers())
         response.raise_for_status()
         
         return response.json()
@@ -112,7 +112,7 @@ class EntraIdentityManager:
         if filter:
             params["$filter"] = filter
         
-        response = requests.get(url, headers=self._headers(), params=params)
+        response = requests.get(url, headers=self._get_headers(), params=params)
         response.raise_for_status()
         
         return response.json().get("value", [])
@@ -132,7 +132,7 @@ class EntraIdentityManager:
             "resourceId": resource_id
         }
         
-        response = requests.post(url, headers=self._headers(), json=payload)
+        response = requests.post(url, headers=self._get_headers(), json=payload)
         response.raise_for_status()
         
         return response.json()
@@ -166,7 +166,7 @@ class EntraIdentityManager:
             graph_url = "https://graph.microsoft.com/v1.0"
             response = requests.post(
                 f"{graph_url}/servicePrincipals",
-                headers=self._headers(),
+                headers=self._get_headers(),
                 json=payload
             )
             sp = response.json() if response.status_code == 201 else {}
@@ -206,5 +206,5 @@ class EntraIdentityManager:
             "accountEnabled": False
         }
         
-        response = requests.patch(url, headers=self._headers(), json=payload)
+        response = requests.patch(url, headers=self._get_headers(), json=payload)
         return response.status_code == 200

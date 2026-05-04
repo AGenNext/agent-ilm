@@ -9,36 +9,80 @@ Similar to Claude Code for developer productivity.
 import argparse
 import sys
 import os
+import json
 from typing import Optional
 
-from agent_ilm import AgentRegistry, Agent, AgentMetadata, RiskTier, DataClassification, AgentStatus
-from agent_ilm import EntraIdentityManager, EntraConfig
+from agent_ilm import Agent, AgentMetadata, RiskTier, DataClassification, AgentStatus
 from agent_ilm import AuditLogger, AuditEventType
 
-
-class Context:
-    """CLI context state"""
-    
-    def __init__(self):
-        self.registry = AgentRegistry()
-        self.audit = AuditLogger()
-        self.manager: Optional[EntraIdentityManager] = None
-    
-    def init_manager(self, tenant_id: str, client_id: str = "", client_secret: str = "") -> None:
-        """Initialize Entra ID manager"""
-        self.manager = EntraIdentityManager(
-            tenant_id=tenant_id,
-            client_id=client_id or os.getenv("ENTRA_CLIENT_ID", ""),
-            client_secret=client_secret or os.getenv("ENTRA_CLIENT_SECRET", "")
-        )
+STATE_FILE = os.path.expanduser("~/.agent-ilm/state.json")
 
 
-# Global context
-ctx = Context()
+def load_agents() -> list[Agent]:
+    """Load agents from state file"""
+    agents = []
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE) as f:
+                data = json.load(f)
+                for item in data.get("agents", []):
+                    agent = Agent(
+                        id=item["id"],
+                        name=item["name"],
+                        description=item.get("description", ""),
+                        status=AgentStatus(item.get("status", "pending")),
+                        metadata=AgentMetadata(
+                            owner=item["metadata"]["owner"],
+                            sponsor=item["metadata"].get("sponsor"),
+                            use_case=item["metadata"].get("use_case", ""),
+                            risk_tier=RiskTier(item["metadata"].get("risk_tier", "medium")),
+                            data_classification=DataClassification(item["metadata"].get("data_classification", "internal"))
+                        ),
+                        service_principal_id=item.get("service_principal_id")
+                    )
+                    agents.append(agent)
+        except Exception:
+            pass
+    return agents
+
+
+def save_agents(agents: list[Agent]) -> None:
+    """Save agents to state file"""
+    os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
+    data = {
+        "agents": [
+            {
+                "id": a.id,
+                "name": a.name,
+                "description": a.description,
+                "status": a.status.value,
+                "metadata": {
+                    "owner": a.metadata.owner,
+                    "sponsor": a.metadata.sponsor,
+                    "use_case": a.metadata.use_case,
+                    "risk_tier": a.metadata.risk_tier.value,
+                    "data_classification": a.metadata.data_classification.value
+                },
+                "service_principal_id": a.service_principal_id
+            }
+            for a in agents
+        ]
+    }
+    with open(STATE_FILE, "w") as f:
+        json.dump(data, f)
+
+
+def find_agent(agents: list[Agent], agent_id: str) -> Optional[Agent]:
+    """Find agent by ID or name"""
+    for a in agents:
+        if a.id == agent_id or a.name == agent_id:
+            return a
+    return None
 
 
 def cmd_register(args) -> int:
     """Register a new agent"""
+    agents = load_agents()
     metadata = AgentMetadata(
         owner=args.owner,
         sponsor=args.sponsor,
@@ -50,27 +94,30 @@ def cmd_register(args) -> int:
     agent = Agent(
         name=args.name,
         description=args.description or "",
+        status=AgentStatus.ACTIVE,
         metadata=metadata
     )
     
-    registered = ctx.registry.register(agent)
+    agents.append(agent)
+    save_agents(agents)
     
     # Audit log
-    ctx.audit.log(
+    audit = AuditLogger()
+    audit.log(
         event_type=AuditEventType.AGENT_REGISTERED,
-        agent_id=registered.id,
+        agent_id=agent.id,
         actor=args.owner,
         action="register_agent",
         details={"name": args.name, "risk_tier": args.risk_tier}
     )
     
-    print(f"✓ Registered agent: {registered.name} (ID: {registered.id})")
+    print(f"✓ Registered agent: {agent.name} (ID: {agent.id})")
     return 0
 
 
 def cmd_list(args) -> int:
     """List all agents"""
-    agents = ctx.registry.list_all()
+    agents = load_agents()
     
     if not agents:
         print("No agents registered")
@@ -88,7 +135,8 @@ def cmd_list(args) -> int:
 
 def cmd_show(args) -> int:
     """Show agent details"""
-    agent = ctx.registry.get(args.agent_id) or ctx.registry.get_by_name(args.agent_id)
+    agents = load_agents()
+    agent = find_agent(agents, args.agent_id)
     
     if not agent:
         print(f"Agent not found: {args.agent_id}")
@@ -103,40 +151,37 @@ def cmd_show(args) -> int:
     print(f"{'Use Case:':<20} {agent.metadata.use_case or '-'}")
     print(f"{'Risk Tier:':<20} {agent.metadata.risk_tier.value}")
     print(f"{'Data Classification:':<20} {agent.metadata.data_classification.value}")
-    print(f"{'Created:':<20} {agent.created_at.isoformat()}")
-    print(f"{'Updated:':<20} {agent.updated_at.isoformat()}")
-    
-    if agent.deprecated_at:
-        print(f"{'Deprecated:':<20} {agent.deprecated_at.isoformat()}")
     
     return 0
 
 
 def cmd_update(args) -> int:
     """Update an agent"""
-    updates = {}
-    
-    if args.name:
-        updates["name"] = args.name
-    if args.description:
-        updates["description"] = args.description
-    if args.owner:
-        updates["owner"] = args.owner
-    if args.sponsor:
-        updates["sponsor"] = args.sponsor
-    
-    agent = ctx.registry.update(args.agent_id, **updates)
+    agents = load_agents()
+    agent = find_agent(agents, args.agent_id)
     
     if not agent:
         print(f"Agent not found: {args.agent_id}")
         return 1
     
-    ctx.audit.log(
+    if args.name:
+        agent.name = args.name
+    if args.description:
+        agent.description = args.description
+    if args.owner:
+        agent.metadata.owner = args.owner
+    if args.sponsor:
+        agent.metadata.sponsor = args.sponsor
+    
+    save_agents(agents)
+    
+    audit = AuditLogger()
+    audit.log(
         event_type=AuditEventType.AGENT_UPDATED,
         agent_id=agent.id,
-        actor=updates.get("owner", "unknown"),
+        actor=args.owner or "unknown",
         action="update_agent",
-        details=updates
+        details={"name": agent.name}
     )
     
     print(f"✓ Updated agent: {agent.name}")
@@ -145,13 +190,21 @@ def cmd_update(args) -> int:
 
 def cmd_deprecate(args) -> int:
     """Deprecate an agent"""
-    agent = ctx.registry.deprecate(args.agent_id)
+    agents = load_agents()
+    agent = find_agent(agents, args.agent_id)
     
     if not agent:
         print(f"Agent not found: {args.agent_id}")
         return 1
     
-    ctx.audit.log(
+    agent.status = AgentStatus.DEPRECATED
+    from datetime import datetime
+    agent.deprecated_at = datetime.utcnow()
+    
+    save_agents(agents)
+    
+    audit = AuditLogger()
+    audit.log(
         event_type=AuditEventType.AGENT_DEPRECATED,
         agent_id=agent.id,
         actor="cli",
@@ -164,11 +217,8 @@ def cmd_deprecate(args) -> int:
 
 def cmd_audit(args) -> int:
     """Show audit logs"""
-    events = ctx.audit.get_events(
-        agent_id=args.agent_id,
-        start_time=args.start_time,
-        end_time=args.end_time
-    )
+    audit = AuditLogger()
+    events = audit.get_events(agent_id=args.agent_id)
     
     if not events:
         print("No audit events found")
@@ -184,22 +234,6 @@ def cmd_audit(args) -> int:
     return 0
 
 
-def cmd_init(args) -> int:
-    """Initialize configuration"""
-    if not args.tenant_id:
-        print("Error: --tenant-id is required")
-        return 1
-    
-    ctx.init_manager(
-        tenant_id=args.tenant_id,
-        client_id=args.client_id,
-        client_secret=args.client_secret
-    )
-    
-    print(f"✓ Initialized for tenant: {args.tenant_id}")
-    return 0
-
-
 def main():
     parser = argparse.ArgumentParser(
         description="Agent Identity Lifecycle Management CLI",
@@ -207,12 +241,6 @@ def main():
     )
     
     subparsers = parser.add_subparsers(dest="command", help="Commands")
-    
-    # init
-    p_init = subparsers.add_parser("init", help="Initialize configuration")
-    p_init.add_argument("--tenant-id", required=True, help="Entra tenant ID")
-    p_init.add_argument("--client-id", help="Application client ID")
-    p_init.add_argument("--client-secret", help="Application client secret")
     
     # register
     p_reg = subparsers.add_parser("register", help="Register a new agent")
@@ -246,8 +274,6 @@ def main():
     # audit
     p_audit = subparsers.add_parser("audit", help="Show audit logs")
     p_audit.add_argument("--agent-id", help="Filter by agent ID")
-    p_audit.add_argument("--start-time", help="Start time (ISO format)")
-    p_audit.add_argument("--end-time", help="End time (ISO format)")
     
     args = parser.parse_args()
     
@@ -256,7 +282,6 @@ def main():
         return 0
     
     commands = {
-        "init": cmd_init,
         "register": cmd_register,
         "list": cmd_list,
         "show": cmd_show,
