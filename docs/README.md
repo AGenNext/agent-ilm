@@ -30,6 +30,31 @@ cd agent-ilm
 pip install -e .
 ```
 
+## CLI Usage
+
+```bash
+# Initialize configuration
+agent-ilm init --tenant-id YOUR_TENANT_ID
+
+# Register a new agent
+agent-ilm register --name "sales-agent" --owner "team@company.com" --sponsor "director@company.com" --risk-tier medium
+
+# List all agents
+agent-ilm list
+
+# Show agent details
+agent-ilm show AGENT_ID
+
+# Update an agent
+agent-ilm update AGENT_ID --sponsor new-sponsor@company.com
+
+# Deprecate an agent
+agent-ilm deprecate AGENT_ID
+
+# Show audit logs
+agent-ilm audit
+```
+
 ## Quick Start
 
 ### Initialize the Identity Manager

@@ -1,3 +1,6 @@
+[project.scripts]
+agent-ilm = "agent_ilm.cli:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
