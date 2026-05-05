@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AGenNext/agent-ilm/schemas/component.schema.json",
+  "title": "Agent ILM Component Manifest",
+  "description": "Machine-readable metadata for a module, SDK surface, CLI command group, workflow, or integration in Agent ILM.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "name",
+    "version",
+    "description",
+    "status",
+    "kind",
+    "owner",
+    "entrypoints",
+    "runtime",
+    "interfaces",
+    "dependencies",
+    "security",
+    "operations"
+  ],
+  "properties": {
+    "schemaVersion": { "type": "string", "const": "1.0.0" },
+    "id": {
+      "type": "string",
+      "description": "Stable lowercase component id. Should match the catalog component folder name.",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,100}[a-z0-9]$"
+    },
+    "name": { "type": "string", "minLength": 1, "maxLength": 140 },
+    "version": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:[-+][0-9A-Za-z.-]+)?$|^\\d{4}\\.\\d{1,2}\\.\\d{1,2}(?:[-+][0-9A-Za-z.-]+)?$"
+    },
+    "description": { "type": "string", "minLength": 20, "maxLength": 1000 },
+    "status": { "type": "string", "enum": ["planned", "experimental", "active", "maintenance", "deprecated"] },
+    "kind": {
+      "type": "string",
+      "enum": ["sdk", "module", "cli", "workflow", "integration", "schema", "policy", "example", "other"]
+    },
+    "owner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["team"],
+      "properties": {
+        "team": { "type": "string", "minLength": 1 },
+        "github": { "type": "string" },
+        "email": { "type": "string", "format": "email" }
+      }
+    },
+    "categories": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "agent-identity",
+          "entra-id",
+          "lifecycle",
+          "governance",
+          "access-review",
+          "audit",
+          "compliance",
+          "cli",
+          "sdk",
+          "automation",
+          "security"
+        ]
+      },
+      "default": []
+    },
+    "entrypoints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary"],
+      "properties": {
+        "primary": { "type": "string" },
+        "readme": { "type": "string" },
+        "docs": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "tests": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "examples": { "type": "array", "items": { "type": "string" }, "default": [] }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["language"],
+      "properties": {
+        "language": { "type": "string", "enum": ["python", "shell", "markdown", "mixed", "other"] },
+        "minimumVersion": { "type": "string" },
+        "packageManager": { "type": "string", "enum": ["pip", "uv", "poetry", "hatch", "none", "other"] },
+        "platforms": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "enum": ["macos", "linux", "windows", "wsl", "container", "other"] },
+          "default": []
+        }
+      }
+    },
+    "interfaces": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "python": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "cli": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "env": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "externalApis": { "type": "array", "items": { "type": "string" }, "default": [] }
+      },
+      "default": {}
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "name"],
+        "properties": {
+          "type": { "type": "string", "enum": ["package", "api", "identity-provider", "cloud", "component", "service", "other"] },
+          "name": { "type": "string" },
+          "required": { "type": "boolean", "default": true },
+          "notes": { "type": "string" }
+        }
+      },
+      "default": []
+    },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dataClassification", "authRequired", "secrets"],
+      "properties": {
+        "dataClassification": { "type": "string", "enum": ["public", "internal", "confidential", "restricted"] },
+        "authRequired": { "type": "boolean" },
+        "roles": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "secrets": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{1,100}$" } },
+        "notes": { "type": "string", "maxLength": 1500 }
+      }
+    },
+    "operations": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "health": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "audit": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "runbooks": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "notes": { "type": "string", "maxLength": 1500 }
+      },
+      "default": {}
+    }
+  }
+}
