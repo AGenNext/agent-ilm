@@ -10,6 +10,7 @@ __author__ = "AGenNext"
 from agent_ilm.registry import AgentRegistry, Agent, AgentMetadata, RiskTier, DataClassification, AgentStatus
 from agent_ilm.entra import EntraIdentityManager, EntraConfig
 from agent_ilm.audit import AuditLogger, AuditEvent, AuditEventType
+from agent_ilm.decision_graph import DecisionGraphEvent, DecisionGraphLogger, ResourceIdentity
 
 __all__ = [
     "AgentRegistry", 
@@ -23,5 +24,8 @@ __all__ = [
     "AuditLogger", 
     "AuditEvent", 
     "AuditEventType",
+    "DecisionGraphEvent",
+    "DecisionGraphLogger",
+    "ResourceIdentity",
     "__version__"
 ]
