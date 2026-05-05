@@ -1,0 +1,65 @@
+name: Build and Release
+
+on:
+  release:
+    types: [created]
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-wheel:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install build
+        run: pip install build
+      
+      - name: Build wheel and sdist
+        run: python -m build
+      
+      - name: Upload Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-exe:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install PyInstaller
+        run: pip install pyinstaller fire
+      
+      - name: Install package
+        run: pip install -e .
+      
+      - name: Build EXE
+        run: |
+          pyinstaller --onefile --name agent-ilm --collect-all agent_ilm --console agent_ilm/cli/__init__.py
+      
+      - name: Upload Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/agent-ilm
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
